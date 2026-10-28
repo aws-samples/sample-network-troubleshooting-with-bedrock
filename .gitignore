@@ -1,0 +1,39 @@
+# Local configuration (holds the Bedrock API key)
+config.json
+
+# Local drafts, screenshots, backups and capture files (not part of the sample)
+blog/
+*.docx
+*.pcap
+*.pcapng
+
+# Security review material (scan output, threat model, review evidence).
+# Kept outside the published sample.
+.ash/
+ash_output/
+security-scan-results/
+security-evidence/
+threat-model/
+*.sarif
+ash.html
+ash.summary.*
+
+# Editor and agent settings
+.vscode/
+.idea/
+.claude/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.log
+/tmp/
+*.bak
+
+# Lua compiled files
+*.luac
+
+# Diagram SVG export embeds base64 images (README uses the PNG)
+docs/*.svg
