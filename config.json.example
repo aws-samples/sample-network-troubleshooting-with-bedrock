@@ -1,0 +1,6 @@
+{
+  "endpoint": "https://bedrock-runtime.us-east-1.amazonaws.com",
+  "api_key": "",
+  "model_id": "us.anthropic.claude-sonnet-5-5",
+  "max_records": 500
+}
