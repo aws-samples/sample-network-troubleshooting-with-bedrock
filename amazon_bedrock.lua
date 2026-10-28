@@ -1,7 +1,7 @@
 -- Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 -- SPDX-License-Identifier: MIT-0
 
--- Network Troubleshooting for Wireshark with Amazon Bedrock
+-- Network Troubleshooting with Amazon Bedrock and Wireshark
 -- Analyzes network packets using Amazon Bedrock AI services
 -- Version: 1.0
 

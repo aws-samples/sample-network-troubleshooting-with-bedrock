@@ -1,10 +1,10 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: MIT-0
 
-# Network Troubleshooting for Wireshark with Amazon Bedrock - Windows installation script
+# Network Troubleshooting with Amazon Bedrock and Wireshark - Windows installation script
 # Run: powershell -ExecutionPolicy Bypass -File install_windows.ps1
 
-Write-Host "Installing Network Troubleshooting for Wireshark with Amazon Bedrock..." -ForegroundColor Cyan
+Write-Host "Installing Network Troubleshooting with Amazon Bedrock and Wireshark..." -ForegroundColor Cyan
 Write-Host ""
 
 # Find Wireshark plugin directory

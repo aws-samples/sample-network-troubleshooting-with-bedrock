@@ -1,10 +1,10 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: MIT-0
 
-# Network Troubleshooting for Wireshark with Amazon Bedrock - Windows uninstall script
+# Network Troubleshooting with Amazon Bedrock and Wireshark - Windows uninstall script
 # Run: powershell -ExecutionPolicy Bypass -File uninstall_windows.ps1
 
-Write-Host "Uninstalling Network Troubleshooting for Wireshark with Amazon Bedrock..." -ForegroundColor Cyan
+Write-Host "Uninstalling Network Troubleshooting with Amazon Bedrock and Wireshark..." -ForegroundColor Cyan
 
 $possibleDirs = @(
     "$env:APPDATA\Wireshark\plugins",

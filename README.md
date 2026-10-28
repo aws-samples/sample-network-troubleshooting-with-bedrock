@@ -1,4 +1,4 @@
-# Network Troubleshooting for Wireshark with Amazon Bedrock
+# Network Troubleshooting with Amazon Bedrock and Wireshark
 
 A Wireshark plugin that sends a summary of captured packets to Amazon Bedrock and
 displays an AI-generated network analysis in a Wireshark window.
@@ -137,7 +137,7 @@ sit in the same directory as `amazon_bedrock.lua`:
   Use the `us.` cross-Region inference profile where one exists; the others are
   on-demand only and use the bare ID.
 
-  | Family | Latest model ID | Request shape |
+  | Family | Model ID | Request shape |
   |---|---|---|
   | Claude 5.5 | `us.anthropic.claude-sonnet-5-5`, `us.anthropic.claude-opus-5-5` | `maxTokens` 64000, `output_config.effort = medium` |
   | OpenAI GPT-6.1 | `us.openai.gpt-6.1-sol`, `us.openai.gpt-6.1-terra` | `maxTokens` 64000, `reasoning.effort = medium` |

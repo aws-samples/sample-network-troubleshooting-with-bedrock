@@ -2,11 +2,11 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: MIT-0
 
-# Network Troubleshooting for Wireshark with Amazon Bedrock - macOS/Linux uninstall script
+# Network Troubleshooting with Amazon Bedrock and Wireshark - macOS/Linux uninstall script
 
 set -e
 
-echo "Uninstalling Network Troubleshooting for Wireshark with Amazon Bedrock..."
+echo "Uninstalling Network Troubleshooting with Amazon Bedrock and Wireshark..."
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
     OS="macos"

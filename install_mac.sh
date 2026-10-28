@@ -2,11 +2,11 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: MIT-0
 
-# Network Troubleshooting for Wireshark with Amazon Bedrock - macOS/Linux installation script
+# Network Troubleshooting with Amazon Bedrock and Wireshark - macOS/Linux installation script
 
 set -e
 
-echo "Installing Network Troubleshooting for Wireshark with Amazon Bedrock..."
+echo "Installing Network Troubleshooting with Amazon Bedrock and Wireshark..."
 
 # Detect OS
 if [[ "$OSTYPE" == "darwin"* ]]; then
