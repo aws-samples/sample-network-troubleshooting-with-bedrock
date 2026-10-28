@@ -1,0 +1,129 @@
+#!/bin/bash
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+#
+# Pre-commit hook for the Amazon Bedrock Wireshark plugin.
+#
+# Runs three gates on staged Lua files and blocks the commit on any failure:
+#   1. Syntax   - luac -p parses the file (catches typos, unbalanced blocks)
+#   2. Load     - tshark actually loads the plugin (catches runtime errors at
+#                 load time, e.g. calling a nil global, bad Field.new names,
+#                 which luac -p cannot see)
+#   3. Secrets  - no API keys or 12-digit AWS account IDs in staged content
+#
+# Enable with:  git config core.hooksPath hooks
+# Bypass once:  git commit --no-verify   (avoid; the gates are cheap)
+
+set -uo pipefail
+
+RED=$'\033[31m'; GREEN=$'\033[32m'; YELLOW=$'\033[33m'; RESET=$'\033[0m'
+fail=0
+
+note() { printf '  %s\n' "$1"; }
+ok()   { printf '  %s✓%s %s\n' "$GREEN" "$RESET" "$1"; }
+bad()  { printf '  %s✗%s %s\n' "$RED" "$RESET" "$1"; fail=1; }
+skip() { printf '  %s-%s %s\n' "$YELLOW" "$RESET" "$1"; }
+
+staged_lua=$(git diff --cached --name-only --diff-filter=ACM -- '*.lua')
+
+printf '\npre-commit checks\n'
+
+# ---------------------------------------------------------------- 1. syntax
+if [ -z "$staged_lua" ]; then
+    skip "no staged .lua files, skipping syntax check"
+else
+    if command -v luac >/dev/null 2>&1; then
+        LUAC=luac
+    elif command -v luac5.4 >/dev/null 2>&1; then
+        LUAC=luac5.4
+    else
+        LUAC=""
+    fi
+
+    if [ -z "$LUAC" ]; then
+        skip "luac not found, cannot check Lua syntax (brew install lua)"
+    else
+        for f in $staged_lua; do
+            # Check the staged content, not the working tree copy
+            tmp=$(mktemp -t precommit_lua)
+            git show ":$f" > "$tmp" 2>/dev/null
+            if err=$("$LUAC" -p "$tmp" 2>&1); then
+                ok "syntax: $f"
+            else
+                bad "syntax: $f"
+                printf '      %s\n' "${err//$tmp/$f}"
+            fi
+            rm -f "$tmp"
+        done
+    fi
+fi
+
+# ------------------------------------------------------------------ 2. load
+# luac -p only parses. Loading under tshark executes the top level, which is
+# where Field.new declarations and menu registration actually run.
+if [ -n "$staged_lua" ] && printf '%s\n' "$staged_lua" | grep -q 'amazon_bedrock.lua'; then
+    if ! command -v tshark >/dev/null 2>&1; then
+        skip "tshark not found, skipping plugin load test"
+    else
+        workdir=$(mktemp -d -t precommit_ws)
+        git show ":amazon_bedrock.lua" > "$workdir/amazon_bedrock.lua" 2>/dev/null
+        if [ -f json.lua ]; then cp json.lua "$workdir/"; fi
+        if [ -f config.json.example ]; then
+            cp config.json.example "$workdir/config.json"
+        fi
+
+        # Minimal one-packet capture so tshark has something to open
+        printf '\xa1\xb2\xc3\xd4\x00\x02\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xff\xff\x00\x00\x00\x01' > "$workdir/t.pcap"
+        printf '\x65\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0e\x00\x00\x00\x0e' >> "$workdir/t.pcap"
+        printf '\xff\xff\xff\xff\xff\xff\x00\x11\x22\x33\x44\x55\x08\x00' >> "$workdir/t.pcap"
+
+        # HOME is overridden so the already-installed copy in
+        # ~/.local/lib/wireshark/plugins is NOT loaded. Without this, tshark
+        # loads both copies, the second Proto registration fails as a duplicate,
+        # and the success message from the installed plugin masks problems in the
+        # staged one - i.e. the test would validate the wrong file.
+        out=$(cd "$workdir" && HOME="$workdir" WIRESHARK_CONFIG_DIR="$workdir/cfg" \
+              tshark -r t.pcap -X lua_script:amazon_bedrock.lua -q 2>&1)
+
+        if printf '%s' "$out" | grep -qiE 'lua error|lua: |syntax error|attempt to (call|index|perform)|bad argument|\[Bedrock Plugin\] Error:|Failed to create protocol'; then
+            bad "plugin load: error reported under tshark"
+            printf '%s\n' "$out" \
+                | grep -iE 'lua error|lua: |syntax error|attempt to|bad argument|Error:|Failed to' \
+                | head -5 | sed 's/^/      /'
+        elif printf '%s' "$out" | grep -q 'loaded successfully'; then
+            ok "plugin load: clean under tshark"
+            # Surface field-registry problems without failing the commit
+            if printf '%s' "$out" | grep -q 'unavailable in this build'; then
+                printf '%s\n' "$out" | grep 'unavailable in this build' | sed 's/^/      /'
+            fi
+            printf '%s\n' "$out" | grep -E 'Detail fields declared|Column fields primed' | sed 's/^/      /'
+        else
+            bad "plugin load: did not report success under tshark"
+            printf '%s\n' "$out" | tail -5 | sed 's/^/      /'
+        fi
+        rm -rf "$workdir"
+    fi
+fi
+
+# --------------------------------------------------------------- 3. secrets
+# The hook itself contains these patterns, so exclude hooks/ from the scan.
+# \b bounds the account-id match so it does not fire on longer digit runs
+# such as epoch-microsecond timestamps.
+secret_hits=$(git diff --cached -- . ':(exclude)hooks/' \
+    | grep -E '^\+' \
+    | grep -inE 'ABSK[A-Za-z0-9+/=]{16,}|aws_secret_access_key|\b[0-9]{12}\b' \
+    || true)
+if [ -n "$secret_hits" ]; then
+    bad "possible secret or AWS account id in staged content:"
+    printf '%s\n' "$secret_hits" | head -5 | sed 's/^/      /'
+else
+    ok "no secrets or account ids in staged content"
+fi
+
+printf '\n'
+if [ "$fail" -ne 0 ]; then
+    printf '%scommit blocked.%s Fix the above, or bypass with --no-verify.\n\n' "$RED" "$RESET"
+    exit 1
+fi
+printf '%sall checks passed.%s\n\n' "$GREEN" "$RESET"
+exit 0
