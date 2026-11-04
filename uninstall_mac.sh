@@ -34,7 +34,7 @@ for dir in "${POSSIBLE_DIRS[@]}"; do
         if [[ -f "$dir/$file" ]]; then
             rm "$dir/$file"
             echo "✓ Removed: $dir/$file"
-            ((removed++))
+            removed=$((removed + 1))
         fi
     done
 done

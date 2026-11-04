@@ -65,15 +65,22 @@ if [ -f "config.json.example" ]; then
 fi
 
 if [ ! -f "$PLUGIN_DIR/config.json" ] && [ -f "config.json.example" ]; then
-    cp config.json.example "$PLUGIN_DIR/config.json"
+    (umask 077 && cp config.json.example "$PLUGIN_DIR/config.json")
     echo "✓ config.json created from example"
     echo ""
     echo "⚠️  IMPORTANT: Edit $PLUGIN_DIR/config.json and set your Amazon Bedrock API Key"
     echo ""
 fi
 
-# Check curl (only real dependency)
-if ! command -v curl &> /dev/null; then
+# config.json holds the API key: keep it readable by the owner only, including
+# a config.json left by an earlier install.
+if [ -f "$PLUGIN_DIR/config.json" ]; then
+    chmod 600 "$PLUGIN_DIR/config.json"
+    echo "✓ config.json permissions set to owner-only (600)"
+fi
+
+# Check curl (only real dependency). The plugin calls it by fixed path.
+if [ ! -x /usr/bin/curl ] && [ ! -x /bin/curl ]; then
     echo "✗ curl not found"
     if [[ "$OS" == "macos" ]]; then
         echo "  curl should be pre-installed on macOS"

@@ -175,6 +175,15 @@ end
 
 -- Global storage for captured packets
 local captured_packets = {}
+-- Frame numbers already stored, so a retap does not store a packet twice
+local seen_frames = {}
+
+-- Called by Wireshark when a capture is opened, closed or retapped, so
+-- packets from a previous capture are never sent with the next analysis.
+local function reset_captured_packets()
+    captured_packets = {}
+    seen_frames = {}
+end
 
 -- Plugin state for async API calls
 local plugin_state = {
@@ -190,6 +199,33 @@ local plugin_state = {
 
 -- Load required libraries safely
 json = nil
+
+-- Resolve curl to a fixed system path instead of a bare "curl". cmd.exe
+-- searches the current directory before PATH, so a curl.exe or curl.bat next
+-- to a downloaded capture would otherwise run, and would receive the header
+-- file that holds the API key. A writable directory early in PATH has the
+-- same effect on any platform.
+local function resolve_curl()
+    local candidates
+    if package.config:sub(1, 1) == "\\" then
+        local root = os.getenv("SystemRoot") or "C:\\Windows"
+        -- The path goes on the cmd.exe command line unquoted, so accept only
+        -- a plain drive path (no spaces, quotes or shell metacharacters).
+        if not root:match("^%a:\\[%w\\_%-%.]*$") then return nil end
+        candidates = { (root:gsub("\\+$", "")) .. "\\System32\\curl.exe" }
+    else
+        candidates = { "/usr/bin/curl", "/bin/curl" }
+    end
+    for _, path in ipairs(candidates) do
+        local f = io.open(path, "rb")
+        if f then
+            f:close()
+            return path
+        end
+    end
+    return nil
+end
+local CURL_PATH = resolve_curl()
 
 local function load_dependencies()
     print("[Bedrock Plugin] Loading dependencies...")
@@ -209,13 +245,17 @@ local function load_dependencies()
     -- Test curl availability. os.execute is used rather than io.popen,
     -- which Wireshark's Lua does not support on Windows.
     local null_device = (package.config:sub(1, 1) == "\\") and "NUL" or "/dev/null"
-    local curl_rc = os.execute("curl --version > " .. null_device .. " 2>&1")
-    local curl_available = (curl_rc == true or curl_rc == 0)
+    local curl_available = false
+    if CURL_PATH then
+        local curl_rc = os.execute(CURL_PATH .. " --version > " .. null_device .. " 2>&1")
+        curl_available = (curl_rc == true or curl_rc == 0)
+    end
     if curl_available then
-        print("[Bedrock Plugin] ✓ Curl available for HTTPS requests")
+        print("[Bedrock Plugin] ✓ Curl available for HTTPS requests: " .. CURL_PATH)
     else
         print("[Bedrock Plugin] ✗ Curl not available")
-        print("[Bedrock Plugin] Please install curl for HTTPS functionality")
+        print("[Bedrock Plugin] Expected at %SystemRoot%\\System32\\curl.exe (Windows) " ..
+              "or /usr/bin/curl (macOS/Linux)")
     end
     
     -- Load JSON library (bundled json.lua)
@@ -756,8 +796,12 @@ end
 -- Packet capture listener to automatically collect packets
 local function packet_listener(pinfo, tvb)
     safe_call(function()
+        -- Skip frames already stored (a retap delivers every packet again)
+        local frame_no = pinfo.number
+        if frame_no and seen_frames[frame_no] then return end
         -- Only capture if we haven't reached the limit
         if #captured_packets < config.max_records then
+            if frame_no then seen_frames[frame_no] = true end
             local proto = resolve_col(col_protocol_field, pinfo.cols.protocol,
                                       "(protocol)", "unknown")
             local info = resolve_col(col_info_field, pinfo.cols.info,
@@ -793,6 +837,7 @@ local function register_packet_tap()
         if Listener then
             local tap = Listener.new("frame")
             tap.packet = packet_listener
+            tap.reset = reset_captured_packets
             print("[Bedrock Plugin] Packet capture tap registered")
         else
             print("[Bedrock Plugin] Packet tap not available")
@@ -1029,7 +1074,11 @@ local function curl_https_request(url, method, headers, body)
         return nil, nil, "Could not write the curl request to a temporary file."
     end
 
-    local curl_cmd = "curl -s --fail-with-body --connect-timeout 30 --max-time 120"
+    if not CURL_PATH then
+        cleanup()
+        return nil, nil, "curl was not found at its system path."
+    end
+    local curl_cmd = CURL_PATH .. " -s --fail-with-body --connect-timeout 30 --max-time 120"
     curl_cmd = curl_cmd .. " -H \"@" .. temp_headers .. "\""
     curl_cmd = curl_cmd .. " --data-binary \"@" .. temp_body .. "\""
     curl_cmd = curl_cmd .. " -w \"\\n---STATUS:%{http_code}---\""
